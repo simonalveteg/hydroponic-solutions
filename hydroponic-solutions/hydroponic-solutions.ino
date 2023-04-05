@@ -1,17 +1,39 @@
 
-const int PWM_PIN = 10;
-const int ANAL_PIN = A5;
+int sensorPin = A2;   // select the input pin for the potentiometer
+int sensorValue = 0;  // variable to store the value coming from the sensor
+int sensorVCC = 13;
 
 void setup() {
-  pinMode(PWM_PIN, OUTPUT);
-  pinMode(ANAL_PIN, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("SETUP");
+  pinMode(sensorVCC, OUTPUT);  // declare the ledPin as an OUTPUT:
+  pinMode(sensorPin, INPUT);
+  digitalWrite(sensorVCC, LOW);
 }
 
 void loop() {
-  for (int i = 255; i > 0; i--) {
-    analogWrite(PWM_PIN, i);
-    Serial.println(i);
-    delay(500);
-    i -= 9;
-  }
+  Serial.println("HEJ?");
+  digitalWrite(sensorVCC, HIGH);        // power the sensor
+  delay(100);                           //make sure the sensor is powered
+  sensorValue = analogRead(sensorPin);  // read the value from the sensor:
+  digitalWrite(sensorVCC, LOW);         //stop power
+  delay(60 * 1000);                     //wait
+  Serial.println(sensorValue);
+  Serial.println("Hej igen");
+}
+
+void bla() {
+
+  digitalWrite(sensorVCC, HIGH);        // power the sensor
+  delay(100);                           //make sure the sensor is powered
+  sensorValue = analogRead(sensorPin);  // read the value from the sensor:
+  digitalWrite(sensorVCC, LOW);         //stop power
+  delay(60 * 1000);                     //wait
+  Serial.print("sensor = ");
+  Serial.println(sensorValue);
+}
+
+void pwmWrite(uint8_t pin, float percent) {
+  int value = 255 * percent;
+  analogWrite(pin, value);
 }
