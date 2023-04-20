@@ -1,94 +1,114 @@
+
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <LiquidCrystal.h>
 
-#define VIN 5
 
 int R1 = 1000;
-int Ra = 25;  //Resitance of Digital Pin, 25 ohms for mega/uno
-int ECPin = A0;
-int ECPower = A1;
+int Ra = 25;  //Resistance of powering Pins
+int ECPin = A1;
 int ECGround = A2;
-
+int ECPower = A0;
+float PPMconversion = 0.7;
 float TemperatureCoef = 0.019;  //this changes depending on what chemical we are measuring
-float PPMconversion = 0.64;
+float K = 1.67;
+#define ONE_WIRE_BUS 8             // Data wire For Temp Probe is plugged into pin 10 on the Arduino
+const int TempProbePossitive = 9;  //Temp Probe power connected to pin 9
+const int TempProbeNegative = 7;   //Temp Probe Negative connected to pin 8
 
-float K = 1.76;  // Cell constant for EU plug
+OneWire oneWire(ONE_WIRE_BUS);        // Setup a oneWire instance to communicate with any OneWire devices
+DallasTemperature sensors(&oneWire);  // Pass our oneWire reference to Dallas Temperature.
 
-#define ONE_WIRE_BUS 8  // Data wire For Temp Probe is plugged into pin 0 on the Arduino
+float Temperature = 10;
+float EC = 0;
+float EC25 = 0;
+int ppm = 0;
 
-// Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
-OneWire oneWire(ONE_WIRE_BUS);
 
-// Pass our oneWire reference to Dallas Temperature.
-DallasTemperature sensors(&oneWire);
+float raw = 0;
+float Vin = 5;
+float Vdrop = 0;
+float Rc = 0;
+float buffer = 0;
 
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-/*
- * The setup function. We only start the sensors here
- */
-void setup(void) {
-  R1 = R1 + Ra;  // Add internal digital pin resistance
+int moistPin = A3;
+int moistValue = 0;
+int moistVcc = 13;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(TempProbeNegative, OUTPUT);    //seting ground pin as output for tmp probe
+  digitalWrite(TempProbeNegative, LOW);  //Seting it to ground so it can sink current
+  pinMode(TempProbePossitive, OUTPUT);   //ditto but for positive
+  digitalWrite(TempProbePossitive, HIGH);
   pinMode(ECPin, INPUT);
   pinMode(ECPower, OUTPUT);     //Setting pin for sourcing current
   pinMode(ECGround, OUTPUT);    //setting pin for sinking current
   digitalWrite(ECGround, LOW);  //We can leave the ground connected permanantly
 
-  Serial.begin(9600);
-  // Start up the dallas temperature library
+  delay(100);  // gives sensor time to settle
   sensors.begin();
+  delay(100);
+  //** Adding Digital Pin Resistance to [25 ohm] to the static Resistor *********//
+  // Consule Read-Me for Why, or just accept it as true
+  R1 = (R1 + Ra);  // Taking into acount Powering Pin Resitance
+
   // Start up the LCD screen
   lcd.begin(16, 2);
+
+  pinMode(moistVcc, OUTPUT);
+  digitalWrite(moistVcc, LOW);
 }
 
-void loop(void) {
-  lcd.setCursor(0, 0);
-  float temperature = readTemperature();
-  lcd.print("Temp: ");
-  lcd.print(temperature);
-  lcd.setCursor(0, 1);
-  lcd.print("PPM: ");
-  lcd.print(readPPM(temperature));
+void loop() {
+  GetEC();          //Calls Code to Go into GetEC() Loop [Below Main Loop] dont call this more that 1/5 hhz [once every five seconds] or you will polarise the water
+  PrintReadings();  // Cals Print routine [below main loop]
+  delay(1000);
+
+  // moist sensor
+  digitalWrite(moistVcc, HIGH);        // power the sensor
+  delay(100);                           //make sure the sensor is powered
+  moistValue = analogRead(moistPin);  // read the value from the sensor:
+  digitalWrite(moistVcc, LOW);         //stop power
+  delay(1000);                          //wait
+  Serial.print("Moisture Level: ");
+  Serial.println(moistValue);
 }
 
-float readTemperature() {
-  // call sensors.requestTemperatures() to issue a global temperature request to all devices on the bus
-  Serial.print("Requesting temperatures...");
-  sensors.requestTemperatures();  // Send the command to get temperatures
-  Serial.println("DONE");
-  // After we got the temperatures, we can print them here.
-  // We use the function ByIndex, and as an example get the temperature from the first sensor only.
-  float tempC = sensors.getTempCByIndex(0);
+void GetEC() {
+  sensors.requestTemperatures();             // Send the command to get temperatures
+  Temperature = sensors.getTempCByIndex(0);  //Stores Value in Variable
 
-  // Check if reading was successful
-  if (tempC != DEVICE_DISCONNECTED_C) {
-    Serial.print("Temperature for the device 1 (index 0) is: ");
-    Serial.println(tempC);
-    return tempC;
-  } else {
-    Serial.println("Error: Could not read temperature data");
-  }
-}
-
-float readEC() {
-  //************Estimates Resistance of Liquid ****************//
   digitalWrite(ECPower, HIGH);
-  float raw = analogRead(ECPin);
+  raw = analogRead(ECPin);
+  raw = analogRead(ECPin);  // This is not a mistake, First reading will be low beause if charged a capacitor
   digitalWrite(ECPower, LOW);
+
   //***************** Converts to EC **************************//
-  float Vdrop = (VIN * raw) / 1024.0;
-  float Rc = (Vdrop * R1) / (VIN - Vdrop);
-  Rc = Rc - Ra;
-  float EC = 1000 / (Rc * K);
-  return EC;
+  Vdrop = (Vin * raw) / 1024.0;
+  Rc = (Vdrop * R1) / (Vin - Vdrop);
+  Rc = Rc - Ra;  //acounting for Digital Pin Resitance
+  EC = 1000 / (Rc * K);
+
+
+  //*************Compensating For Temperaure********************//
+  EC25 = EC / (1 + TemperatureCoef * (Temperature - 25.0));
+  ppm = (EC25) * (PPMconversion * 1000);
 }
 
-float readPPM(float temperature) {
-  float EC = readEC();
-  //*************Compensating For Temperaure********************//
-  float EC25 = EC / (1 + TemperatureCoef * (temperature - 25.0));
-  float ppm = (EC25) * (PPMconversion * 1000);
-  return ppm;
+
+//***This Loop Is called From Main Loop- Prints to serial usefull info ***//
+void PrintReadings() {
+  Serial.print("Rc: ");
+  Serial.print(Rc);
+  Serial.print(" EC: ");
+  Serial.print(EC25);
+  Serial.print(" Siemens  ");
+  Serial.print(ppm);
+  Serial.print(" ppm  ");
+  Serial.print(Temperature);
+  Serial.println(" *C ");
 }

@@ -5,7 +5,7 @@ int sensorVCC = 13;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(sensorVCC, OUTPUT);  // declare the ledPin as an OUTPUT:
+  pinMode(sensorVCC, OUTPUT);
   digitalWrite(sensorVCC, LOW);
 }
 
