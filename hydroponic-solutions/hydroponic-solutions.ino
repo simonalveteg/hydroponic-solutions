@@ -2,6 +2,10 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <LiquidCrystal.h>
+#include <NewPing.h>
+#define TRIGGER_PIN  1  // Arduino pin tied to trigger pin on the ultrasonic sensor.
+#define ECHO_PIN     0  // Arduino pin tied to echo pin on the ultrasonic sensor.
+#define MAX_DISTANCE 200 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
 
 
 int R1 = 1000;
@@ -38,8 +42,13 @@ int moistPin = A3;
 int moistValue = 0;
 int moistVcc = 13;
 
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
+
+
 void setup() {
   Serial.begin(9600);
+  
+  // EC probe
   pinMode(TempProbeNegative, OUTPUT);    //seting ground pin as output for tmp probe
   digitalWrite(TempProbeNegative, LOW);  //Seting it to ground so it can sink current
   pinMode(TempProbePossitive, OUTPUT);   //ditto but for positive
@@ -56,26 +65,36 @@ void setup() {
   // Consule Read-Me for Why, or just accept it as true
   R1 = (R1 + Ra);  // Taking into acount Powering Pin Resitance
 
+  // moist sensor
+  pinMode(moistVcc, OUTPUT);
+  digitalWrite(moistVcc, LOW);
+
   // Start up the LCD screen
   lcd.begin(16, 2);
 
-  pinMode(moistVcc, OUTPUT);
-  digitalWrite(moistVcc, LOW);
 }
 
 void loop() {
+
+  // EC probe
   GetEC();          //Calls Code to Go into GetEC() Loop [Below Main Loop] dont call this more that 1/5 hhz [once every five seconds] or you will polarise the water
   PrintReadings();  // Cals Print routine [below main loop]
-  delay(1000);
 
   // moist sensor
   digitalWrite(moistVcc, HIGH);        // power the sensor
   delay(100);                           //make sure the sensor is powered
   moistValue = analogRead(moistPin);  // read the value from the sensor:
   digitalWrite(moistVcc, LOW);         //stop power
-  delay(1000);                          //wait
   Serial.print("Moisture Level: ");
   Serial.println(moistValue);
+
+  // ultrasonic sensor
+  unsigned int uS = sonar.ping(); // Send ping, get ping time in microseconds (uS).
+  Serial.print("Ping: ");
+  Serial.print(sonar.convert_cm(uS)); // Convert ping time to distance and print result (0 = outside set distance range, no ping echo)
+  Serial.println("cm");
+ 
+  delay(1000);                          //wait
 }
 
 void GetEC() {
