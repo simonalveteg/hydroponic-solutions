@@ -9,9 +9,9 @@ Conductivity::Conductivity(int oneWireBusPin, int ECDataPin, int ECGroundPin, in
 
 void Conductivity::setup() {
   pinMode(dataPin, INPUT);
-  pinMode(powerPin, OUTPUT);
-  pinMode(groundPin, OUTPUT);
-  digitalWrite(groundPin, LOW);
+  pinMode(powerPin, OUTPUT);     // Setting pin for sourcing current
+  pinMode(groundPin, OUTPUT);    // Setting pin for sinking current
+  digitalWrite(groundPin, LOW);  // We can leave the ground connected permanantly -- not connected to ground to reduce noise?
 
   delay(100);
   sensors->begin();
@@ -21,15 +21,7 @@ void Conductivity::setup() {
 }
 
 void Conductivity::print() {
-  Serial.print("Rc: ");
-  Serial.print(Rc);
-  Serial.print(" EC: ");
-  Serial.print(EC25);
-  Serial.print(" Siemens  ");
-  Serial.print(ppm);
-  Serial.print(" ppm  ");
-  Serial.print(Temperature);
-  Serial.println(" *C ");
+  Serial << "RC: " << Rc << " EC: " << EC25 << " Siemens " << ppm << " ppm " << Temperature << " *C " << endl;
 }
 
 void Conductivity::read() {

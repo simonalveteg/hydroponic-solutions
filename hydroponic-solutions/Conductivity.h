@@ -4,6 +4,7 @@
 #include "Arduino.h"
 #include "OneWire.h"
 #include "DallasTemperature.h"
+#include <Streaming.h> // for serial << usage
 
 class Conductivity {
 private:
