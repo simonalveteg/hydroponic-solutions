@@ -21,7 +21,7 @@ void Conductivity::setup() {
 }
 
 void Conductivity::print() {
-  Serial << " Rc: " << Rc << " EC: " << EC << " EC25: " << EC25 << " ppm: " << ppm << endl;
+  Serial << " Rc: " << Rc << " EC25: " << EC25 << " ppm: " << ppm << ", " << Temperature << " *C " << endl;
 }
 
 void Conductivity::read() {

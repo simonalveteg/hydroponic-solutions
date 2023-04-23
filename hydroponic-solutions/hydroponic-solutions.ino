@@ -39,9 +39,10 @@ void loop() {
     checkEC();
   }
   lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd << "EC: " << conductivity.EC25;
   lcd.setCursor(0, 1);
-  lcd.print("Water Level ");
-  lcd.print(waterState);
+  lcd << "Water Level " << waterState;
   delay(1000);
 }
 
