@@ -1,7 +1,7 @@
 #include "Conductivity.h"
 
 Conductivity::Conductivity(int oneWireBusPin, int ECDataPin, int ECGroundPin, int ECPowerPin)
-  : R1(1000), Ra(25), PPMconversion(0.7), TemperatureCoef(0.019), K(1.67),
+  : R1(1000), Ra(25), PPMconversion(0.7), TemperatureCoef(0.019), K(1.67), Vin(5.0),
     dataPin(ECDataPin), groundPin(ECGroundPin), powerPin(ECPowerPin) {
   oneWire = new OneWire(oneWireBusPin);
   sensors = new DallasTemperature(oneWire);
