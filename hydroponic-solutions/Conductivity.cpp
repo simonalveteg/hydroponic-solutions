@@ -11,7 +11,7 @@ void Conductivity::setup() {
   pinMode(dataPin, INPUT);
   pinMode(powerPin, OUTPUT);     // Setting pin for sourcing current
   pinMode(groundPin, OUTPUT);    // Setting pin for sinking current
-  digitalWrite(groundPin, LOW);  // We can leave the ground connected permanantly -- not connected to ground to reduce noise?
+  digitalWrite(groundPin, LOW);  // We can leave the ground connected permanantly -- not connected to regular ground pin to reduce noise?
 
   delay(100);
   sensors->begin();
@@ -21,7 +21,7 @@ void Conductivity::setup() {
 }
 
 void Conductivity::print() {
-  Serial << "RC: " << Rc << " EC: " << EC25 << " Siemens " << ppm << " ppm " << Temperature << " *C " << endl;
+  Serial << " Rc: " << Rc << " EC: " << EC << " EC25: " << EC25 << " ppm: " << ppm << endl;
 }
 
 void Conductivity::read() {
