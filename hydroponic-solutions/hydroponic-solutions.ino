@@ -10,14 +10,13 @@
 
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
-Moisture moisture(A3, 13);
 Sonar sonar(1, 0, 200);
 Conductivity conductivity(8, A1, A2, A0);
 Pump waterPump(6);
 Pump nutrientPump(7);
 Pump stirPump(9);
 
-float waterState = 0;  // keep track of water level (in terms of percentage filled?)
+int waterState = 0;  // keep track of water level (in terms of percentage filled?)
 float nutrientState = 0;
 
 float ECsetPoint = 1.6;  // Preferred value of EC
@@ -26,7 +25,6 @@ void setup() {
   Serial.begin(9600);
 
   conductivity.setup();
-  moisture.setup();
 
   // Start up the LCD screen
   lcd.begin(16, 2);
@@ -35,14 +33,13 @@ void setup() {
 void loop() {
   Serial << "===== NEW READING ====" << endl;
   if (checkWaterLevel()) {
-    checkMoisture();
     checkEC();
   }
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd << "EC: " << conductivity.EC25;
   lcd.setCursor(0, 1);
-  lcd << "Water Level " << waterState;
+  lcd << "Water Level " << waterState << "%";
   delay(1000);
 }
 
@@ -51,22 +48,11 @@ void loop() {
 */
 bool checkWaterLevel() {
   unsigned int sonarDistance = sonar.read();
-  unsigned int waterHeight = WATER_MAX_HEIGHT - sonarDistance;
-  waterState = waterHeight / WATER_MAX_HEIGHT;
-  Serial << " Distance: " << sonarDistance << " cm." << endl;
+  float waterHeight = WATER_MAX_HEIGHT - sonarDistance;
+  waterState = waterHeight / WATER_MAX_HEIGHT * 100;
+  waterState = (waterState < 0) ? 0 : waterState; // Prohibit from going under 0
+  Serial << " Distance: " << sonarDistance << " cm. Water height: " << waterHeight << "cm. Water State: " << waterState << "%" << endl;
   return waterHeight > WATER_MIN_HEIGHT;
-}
-
-/**
-* Check moisture in grow-medium. If too low start water pump?
-*/
-void checkMoisture() {
-  int moistureLevel = moisture.read();
-  Serial << " Moisture Level: " << moistureLevel << "." << endl;
-  int someLevel = 800;  // temporary
-  if (moistureLevel < someLevel) {
-    waterPump.start(5000);
-  }
 }
 
 /**
@@ -76,8 +62,9 @@ void checkEC() {
   conductivity.read();
   conductivity.print();
 
-  if (conductivity.EC25 < ECsetPoint) {
-    nutrientPump.start(1000);
-    stirPump.start(20000);
+  if (conductivity.EC25 < ECsetPoint && conductivity.EC25 > 0.01) {
+    Serial << "Nutrient solution low, starting pumps." << endl;
+    nutrientPump.start(100);
+    stirPump.start(200);
   }
 }
