@@ -5,8 +5,16 @@
 #include "Conductivity.h"
 #include "Pump.h"
 
-#define WATER_MIN_HEIGHT 5   // temporary
-#define WATER_MAX_HEIGHT 15  // temporary
+
+#define RUN_INTERVAL 5000
+#define RUN_TIME 30000
+
+#define STATE_MAIN 0
+#define STATE_STIR 1
+#define STATE_NUTRIENT 2
+#define STATE_WAIT 3
+
+int state;
 
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
@@ -16,31 +24,62 @@ Pump waterPump(6);
 Pump nutrientPump(7);
 Pump stirPump(9);
 
-int waterState = 0;  // keep track of water level (in terms of percentage filled?)
-float nutrientState = 0;
+int waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
 
-float ECsetPoint = 1.6;  // Preferred value of EC
+float ECsetPoint = 1.6;  // Preferred value of EC is 1.6
 
 void setup() {
   Serial.begin(9600);
-
   conductivity.setup();
-
-  // Start up the LCD screen
   lcd.begin(16, 2);
+  updateLCD();
+  state = STATE_MAIN;
 }
 
 void loop() {
-  Serial << "===== NEW READING ====" << endl;
-  if (checkWaterLevel()) {
-    checkEC();
+  switch (state) {
+    case STATE_MAIN:
+      Serial << "=== MAIN STATE ===" << endl;
+      if (checkWaterLevel()) {
+        state = STATE_STIR;
+      } else {
+        state = STATE_WAIT;
+      }
+      updateLCD();
+      break;
+    case STATE_STIR:
+      Serial << "=== STIR STATE ===" << endl;
+      waterPump.start(RUN_TIME);
+      stirPump.start(RUN_TIME);
+      if (checkEC()) {
+        state = STATE_WAIT;
+      } else {
+        state = STATE_NUTRIENT;
+      }
+      updateLCD();
+      break;
+    case STATE_NUTRIENT:
+      Serial << "=== NUTRIENT STATE ===" << endl;
+      Serial << "Nutrient solution low, starting nutrient pump." << endl;
+      nutrientPump.start(2000);
+      state = STATE_MAIN;
+      break;
+    case STATE_WAIT:
+      Serial << "=== WAIT STATE ===" << endl;
+      delay(RUN_INTERVAL);
+      state = STATE_MAIN;
+      break;
+    default:
+      Serial << "Uh oh.." << endl;
   }
+}
+
+void updateLCD() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd << "EC: " << conductivity.EC25;
   lcd.setCursor(0, 1);
-  lcd << "Water Level " << waterState << "%";
-  delay(1000);
+  lcd << "Water Level " << waterLevel << "%";
 }
 
 /**
@@ -48,23 +87,18 @@ void loop() {
 */
 bool checkWaterLevel() {
   unsigned int sonarDistance = sonar.read();
-  float waterHeight = WATER_MAX_HEIGHT - sonarDistance;
-  waterState = waterHeight / WATER_MAX_HEIGHT * 100;
-  waterState = (waterState < 0) ? 0 : waterState; // Prohibit from going under 0
-  Serial << " Distance: " << sonarDistance << " cm. Water height: " << waterHeight << "cm. Water State: " << waterState << "%" << endl;
-  return waterHeight > WATER_MIN_HEIGHT;
+  float maxDistance = 8;
+  float minDistance = 1;
+  waterLevel = 100 - 100 * (sonarDistance - minDistance) / (maxDistance - minDistance);
+  Serial << "Distance to water: " << sonarDistance << "cm. Water level: " << waterLevel << "%" << endl;
+  return sonarDistance >= minDistance && sonarDistance <= maxDistance;
 }
 
 /**
-* Check EC level. If EC is too low the nutrien-pump should run for a short time, then run the stir-pump for a while.
+* Check EC level. Return true if value is above setpoint.
 */
-void checkEC() {
+bool checkEC() {
   conductivity.read();
   conductivity.print();
-
-  if (conductivity.EC25 < ECsetPoint && conductivity.EC25 > 0.01) {
-    Serial << "Nutrient solution low, starting pumps." << endl;
-    nutrientPump.start(100);
-    stirPump.start(200);
-  }
+  return conductivity.EC25 > ECsetPoint;
 }
