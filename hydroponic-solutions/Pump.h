@@ -8,7 +8,8 @@ private:
   int pin;
 public:
   Pump(int pin);
-  void start(int millis);
+  void start();
+  void stop();
 };
 
 #endif

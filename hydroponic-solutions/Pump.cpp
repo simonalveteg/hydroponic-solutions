@@ -4,8 +4,10 @@ Pump::Pump(int pin) : pin(pin) {
   pinMode(pin, OUTPUT);
 }
 
-void Pump::start(int millis) {
+void Pump::start() {
   digitalWrite(pin, HIGH);
-  delay(millis);
+}
+
+void Pump::stop() {
   digitalWrite(pin, LOW);
 }
