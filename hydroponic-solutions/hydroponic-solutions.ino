@@ -32,8 +32,6 @@ enum class DisplayState {
 int state;
 DisplayState dispState;
 
-unsigned long interactionTimer = 0;
-
 const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
@@ -45,13 +43,12 @@ Pump stirPump(11);
 
 int waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
 
-float ECsetPoint = 1.6;  // Preferred value of EC is 1.6
+float targetEC = 1.6;  // Preferred value of EC is 1.6
 int screenState = 0;
 
-unsigned long waitTimer = 0, pumpTimer = 0;
+unsigned long waitTimer = 0, pumpTimer = 0, interactionTimer = 0;
 
 const int screenPin = 6, ecUpPin = 7, ecDownPin = 8;
-
 OneButton btnScreen = OneButton(screenPin, true, true);
 OneButton btnUp = OneButton(ecUpPin, true, true);
 OneButton btnDown = OneButton(ecDownPin, true, true);
@@ -129,7 +126,7 @@ void loop() {
 }
 
 void updateLCD() {
-  Serial << "DisplayState: " << static_cast<int>(dispState) << " time: " << millis()-interactionTimer << endl;
+  Serial << "DisplayState: " << static_cast<int>(dispState) << " time: " << millis() - interactionTimer << endl;
   switch (dispState) {
     case DisplayState::INIT:
       logoAnimation();
@@ -150,7 +147,7 @@ void updateLCD() {
       break;
     case DisplayState::TARGET_EC:
       lcd.setCursor(0, 1);
-      lcd << "Target EC: " << ECsetPoint << "     ";
+      lcd << "Target EC: " << targetEC << "     ";
       break;
     case DisplayState::SLEEP:
       lcd.setCursor(0, 1);
@@ -187,7 +184,7 @@ bool checkWaterLevel() {
 bool checkEC() {
   conductivity.read();
   conductivity.print();
-  return conductivity.EC25 > ECsetPoint;
+  return conductivity.EC25 > targetEC;
 }
 
 void buttonSetup() {
@@ -200,13 +197,13 @@ void buttonSetup() {
     Serial.println("PRESSED BUTTON");
     interactionTimer = millis();
     dispState = DisplayState::TARGET_EC;
-    ECsetPoint += 0.1;
+    targetEC += 0.1;
   });
   btnDown.attachClick([]() {
     Serial.println("PRESSED BUTTON");
     interactionTimer = millis();
     dispState = DisplayState::TARGET_EC;
-    ECsetPoint -= 0.1;
+    targetEC -= 0.1;
   });
 }
 
