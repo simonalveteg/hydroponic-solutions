@@ -7,23 +7,37 @@
 
 
 #define RUN_INTERVAL 5000
-#define RUN_TIME 30000
-#define NUTRIENT_RUN_TIME 30000
+#define RUN_TIME 3000
+#define NUTRIENT_RUN_TIME 2000
 
 #define STATE_MAIN 0
 #define STATE_STIR 1
 #define STATE_NUTRIENT 2
 #define STATE_WAIT 3
 
-int state;
+enum class DisplayState {
+  CURRENT_EC,
+  TEMP,
+  WATER_LEVEL,
+  TARGET_EC,
+  IDLE,
+  INIT,
+  SLEEP
+};
 
-const int rs = 8, en = 9, d4 = 10, d5 = 11, d6 = 12, d7 = 13;
+int state;
+DisplayState dispState;
+
+int interactionTimer = 0;
+
+const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
 Conductivity conductivity(A5, A1, A2, A0);
 Sonar sonar(A3, A4, 200);
-Pump waterPump(4);
-Pump nutrientPump(5);
-Pump stirPump(6);
+Pump waterPump(9);
+Pump nutrientPump(10);
+Pump stirPump(11);
 
 int waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
 
@@ -32,7 +46,7 @@ int screenState = 0;
 
 unsigned long waitTimer = 0, pumpTimer = 0;
 
-const int screenPin = 1, ecUpPin = 2, ecDownPin = 3;
+const int screenPin = 6, ecUpPin = 7, ecDownPin = 8;
 
 OneButton btnScreen = OneButton(screenPin, true, true);
 OneButton btnUp = OneButton(ecUpPin, true, true);
@@ -42,14 +56,8 @@ void setup() {
   Serial.begin(9600);
   buttonSetup();
   conductivity.setup();
-  lcd.begin(16, 2);
-  // updateLCD();
-  for (char i = 47; i < 127; i++)  // send 80 consecutive displayable characters to the LCD
-  {
-    lcd.print(i);
-    delay(100);  // this delay allows you to observe the addressing sequence
-  }
   state = STATE_MAIN;
+  dispState = DisplayState::INIT;
 }
 
 void loop() {
@@ -59,7 +67,9 @@ void loop() {
   updateLCD();
   switch (state) {
     case STATE_MAIN:
-      Serial << "=== MAIN STATE ===" << endl;
+      lcd.setCursor(0, 0);
+      lcd.println("MAIN STATE       ");
+
       if (checkWaterLevel()) {
         waterPump.start();
         stirPump.start();
@@ -71,13 +81,16 @@ void loop() {
       }
       break;
     case STATE_WAIT:
-      Serial << "=== WAIT STATE ===" << endl;
+      lcd.setCursor(0, 0);
+      lcd.println("IDLE STATE       ");
+
       if (millis() - waitTimer > RUN_INTERVAL) {
         state = STATE_MAIN;
       }
       break;
     case STATE_STIR:
-      Serial << "=== STIR STATE ===" << endl;
+      lcd.setCursor(0, 0);
+      lcd.println("STIR STATE       ");
 
       if (millis() - pumpTimer > RUN_TIME) {
         waterPump.stop();
@@ -94,11 +107,16 @@ void loop() {
       }
       break;
     case STATE_NUTRIENT:
-      Serial << "=== NUTRIENT STATE ===" << endl;
-      Serial << "Nutrient solution low, starting nutrient pump." << endl;
+      lcd.setCursor(0, 0);
+      lcd.println("NUTRIENT STATE       ");
       if (millis() - pumpTimer > NUTRIENT_RUN_TIME) {
         nutrientPump.stop();
-        state = STATE_MAIN;
+        stirPump.start();
+        pumpTimer = millis();
+        if (millis() - pumpTimer > RUN_TIME) {
+          stirPump.stop();
+          state = STATE_MAIN;
+        }
       }
       break;
     default:
@@ -107,13 +125,51 @@ void loop() {
 }
 
 void updateLCD() {
-  Serial << "Update Display" << endl;
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  Serial << "ECsetPoint: " << ECsetPoint << " ScreenState: " << screenState << endl;
-  lcd << "EC: " << conductivity.EC25;
-  lcd.setCursor(0, 1);
-  lcd << "Water Level " << waterLevel << "%";
+  switch (dispState) {
+    case DisplayState::INIT:
+      lcd.begin(16, 2);
+      lcd.print("   HYDROPONIC   ");
+      delay(800);
+      lcd.setCursor(0, 1);
+      lcd.print("   SOLUTIONS    ");
+      delay(5000);
+      dispState = DisplayState::CURRENT_EC;
+      break;
+    case DisplayState::CURRENT_EC:
+      lcd.setCursor(0, 1);
+      lcd << "Current EC: " << conductivity.EC25 << "     ";
+      break;
+    case DisplayState::TEMP:
+      lcd.setCursor(0, 1);
+      lcd << "Temp: " << conductivity.Temperature << char(223) << "C     ";
+      break;
+    case DisplayState::WATER_LEVEL:
+      lcd.setCursor(0, 1);
+      lcd << "Water Lvl: " << waterLevel << "%     ";
+      break;
+    case DisplayState::TARGET_EC:
+      lcd.setCursor(0, 1);
+      lcd << "Target EC: " << ECsetPoint << "     ";
+      break;
+    case DisplayState::IDLE:
+      lcd.setCursor(0, 1);
+      lcd.print("   IDLE   ");
+      break;
+    case DisplayState::SLEEP:
+      lcd.setCursor(0, 1);
+      lcd.noDisplay();
+      break;
+    default:
+      break;
+  }
+
+  // Serial << "Update Display" << endl;
+  // lcd.clear();
+  // lcd.setCursor(0, 0);
+  // Serial << "ECsetPoint: " << ECsetPoint << " ScreenState: " << screenState << endl;
+  // lcd << "EC: " << conductivity.EC25;
+  // lcd.setCursor(0, 1);
+  // lcd << "Water Level " << waterLevel << "%";
 }
 
 /**
@@ -140,13 +196,30 @@ bool checkEC() {
 
 void buttonSetup() {
   btnScreen.attachClick([]() {
-    screenState += 1;
+    Serial.println("PRESSED BUTTON");
+    goToNext(dispState);
   });
   btnUp.attachClick([]() {
-    Serial.println("PRESS UP");
+    Serial.println("PRESSED BUTTON");
+    dispState = DisplayState::TARGET_EC;
     ECsetPoint += 0.1;
   });
   btnDown.attachClick([]() {
+    Serial.println("PRESSED BUTTON");
+    dispState = DisplayState::TARGET_EC;
     ECsetPoint -= 0.1;
   });
+}
+
+void goToNext(DisplayState& dispState) {
+  if (dispState == DisplayState::SLEEP) {
+    dispState = DisplayState::CURRENT_EC;
+    return;
+  }
+  int nextState = static_cast<int>(dispState) + 1;
+  if (nextState > static_cast<int>(DisplayState::WATER_LEVEL)) {
+    dispState = DisplayState::CURRENT_EC;
+  } else {
+    dispState = static_cast<DisplayState>(nextState);
+  }
 }
