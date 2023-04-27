@@ -12,9 +12,10 @@
 #define NUTRIENT_RUN_TIME 2000
 
 #define STATE_MAIN 0
-#define STATE_STIR 1
+#define STATE_PUMP 1
 #define STATE_NUTRIENT 2
 #define STATE_WAIT 3
+#define STATE_STIR 4
 
 enum class DisplayState {
   CURRENT_EC,
@@ -27,6 +28,7 @@ enum class DisplayState {
 
 int state;
 DisplayState dispState;
+DisplayState prevDispState;
 
 const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5, backlightPin = 12;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
@@ -70,7 +72,7 @@ void loop() {
         waterPump.start();
         stirPump.start();
         pumpTimer = millis();
-        state = STATE_STIR;
+        state = STATE_PUMP;
       } else {
         waitTimer = millis();
         state = STATE_WAIT;
@@ -84,7 +86,7 @@ void loop() {
         state = STATE_MAIN;
       }
       break;
-    case STATE_STIR:
+    case STATE_PUMP:
       lcd.setCursor(0, 0);
       lcd.println("PUMP AND STIR...  ");
 
@@ -104,15 +106,20 @@ void loop() {
       break;
     case STATE_NUTRIENT:
       lcd.setCursor(0, 0);
-      lcd.println("PUMP NUTRIENTS...    ");
+      lcd.print("PUMP NUTRIENTS...    ");
       if (millis() - pumpTimer > NUTRIENT_RUN_TIME) {
         nutrientPump.stop();
         stirPump.start();
         pumpTimer = millis();
-        if (millis() - pumpTimer > RUN_TIME) {
-          stirPump.stop();
-          state = STATE_MAIN;
-        }
+        state = STATE_STIR;
+      }
+      break;
+    case STATE_STIR:
+      lcd.setCursor(0, 0);
+      lcd.print("STIRRING...      ");
+      if (millis() - pumpTimer > RUN_TIME) {
+        stirPump.stop();
+        state = STATE_MAIN;
       }
       break;
     default:
@@ -121,7 +128,7 @@ void loop() {
 }
 
 void updateLCD() {
-  Serial << "DisplayState: " << static_cast<int>(dispState) << " time: " << millis() - interactionTimer << endl;
+  Serial << "DisplayState: " << static_cast<int>(dispState) << "Prev: " << static_cast<int>(prevDispState) << " time: " << millis() - interactionTimer << endl;
   switch (dispState) {
     case DisplayState::INIT:
       logoAnimation();
@@ -154,7 +161,8 @@ void updateLCD() {
     default:
       break;
   }
-  if (millis() - interactionTimer > 6000) {
+  if (millis() - interactionTimer > 6000 && dispState != DisplayState::SLEEP) {
+    prevDispState = dispState;
     dispState = DisplayState::SLEEP;
   }
 }
@@ -185,8 +193,7 @@ void buttonSetup() {
   btnScreen.attachClick([]() {
     Serial.println("PRESSED BUTTON");
     interactionTimer = millis();
-    wakeUp();
-    goToNext(dispState);
+    goToNext();
   });
   btnUp.attachClick([]() {
     Serial.println("PRESSED BUTTON");
@@ -202,7 +209,6 @@ void changeProperty(bool up) {
   switch (dispState) {
     case DisplayState::SLEEP:
       wakeUp();
-      dispState = DisplayState::CURRENT_EC;
       break;
     case DisplayState::TARGET_EC:
     case DisplayState::CURRENT_EC:
@@ -218,7 +224,11 @@ void changeProperty(bool up) {
   interactionTimer = millis();
 }
 
-void goToNext(DisplayState& dispState) {
+void goToNext() {
+  if (dispState == DisplayState::SLEEP) {
+    wakeUp();
+    return;
+  }
   int nextState = static_cast<int>(dispState) + 1;
   if (nextState > static_cast<int>(DisplayState::WATER_LEVEL)) {
     dispState = DisplayState::CURRENT_EC;
@@ -228,6 +238,7 @@ void goToNext(DisplayState& dispState) {
 }
 
 void wakeUp() {
+  dispState = prevDispState;
   Serial.println("turn on display");
   digitalWrite(backlightPin, HIGH);
 }
