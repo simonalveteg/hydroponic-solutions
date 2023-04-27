@@ -20,15 +20,19 @@ enum class DisplayState {
   TEMP,
   WATER_LEVEL,
   TARGET_EC,
-  IDLE,
   INIT,
-  SLEEP
+  SLEEP,
+  WAKE,
+  RUN_TsIME,
+  SET_RUN_TIME,
+  NUTRITION_TIME,
+  SET_NUTRITION_TIME
 };
 
 int state;
 DisplayState dispState;
 
-int interactionTimer = 0;
+unsigned long interactionTimer = 0;
 
 const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
@@ -125,14 +129,11 @@ void loop() {
 }
 
 void updateLCD() {
+  Serial << "DisplayState: " << static_cast<int>(dispState) << " time: " << millis()-interactionTimer << endl;
   switch (dispState) {
     case DisplayState::INIT:
-      lcd.begin(16, 2);
-      lcd.print("   HYDROPONIC   ");
-      delay(800);
-      lcd.setCursor(0, 1);
-      lcd.print("   SOLUTIONS    ");
-      delay(5000);
+      logoAnimation();
+      interactionTimer = millis();
       dispState = DisplayState::CURRENT_EC;
       break;
     case DisplayState::CURRENT_EC:
@@ -151,25 +152,20 @@ void updateLCD() {
       lcd.setCursor(0, 1);
       lcd << "Target EC: " << ECsetPoint << "     ";
       break;
-    case DisplayState::IDLE:
-      lcd.setCursor(0, 1);
-      lcd.print("   IDLE   ");
-      break;
     case DisplayState::SLEEP:
       lcd.setCursor(0, 1);
       lcd.noDisplay();
       break;
+    case DisplayState::WAKE:
+      lcd.display();
+      dispState = DisplayState::CURRENT_EC;
+      break;
     default:
       break;
   }
-
-  // Serial << "Update Display" << endl;
-  // lcd.clear();
-  // lcd.setCursor(0, 0);
-  // Serial << "ECsetPoint: " << ECsetPoint << " ScreenState: " << screenState << endl;
-  // lcd << "EC: " << conductivity.EC25;
-  // lcd.setCursor(0, 1);
-  // lcd << "Water Level " << waterLevel << "%";
+  if (millis() - interactionTimer > 60000) {
+    dispState = DisplayState::SLEEP;
+  }
 }
 
 /**
@@ -197,15 +193,18 @@ bool checkEC() {
 void buttonSetup() {
   btnScreen.attachClick([]() {
     Serial.println("PRESSED BUTTON");
+    interactionTimer = millis();
     goToNext(dispState);
   });
   btnUp.attachClick([]() {
     Serial.println("PRESSED BUTTON");
+    interactionTimer = millis();
     dispState = DisplayState::TARGET_EC;
     ECsetPoint += 0.1;
   });
   btnDown.attachClick([]() {
     Serial.println("PRESSED BUTTON");
+    interactionTimer = millis();
     dispState = DisplayState::TARGET_EC;
     ECsetPoint -= 0.1;
   });
@@ -213,7 +212,8 @@ void buttonSetup() {
 
 void goToNext(DisplayState& dispState) {
   if (dispState == DisplayState::SLEEP) {
-    dispState = DisplayState::CURRENT_EC;
+    Serial.println("turn on display");
+    dispState = DisplayState::WAKE;
     return;
   }
   int nextState = static_cast<int>(dispState) + 1;
@@ -222,4 +222,37 @@ void goToNext(DisplayState& dispState) {
   } else {
     dispState = static_cast<DisplayState>(nextState);
   }
+}
+
+void logoAnimation() {
+  int animDelay = 80;
+  lcd.begin(16, 2);
+  lcd.setCursor(0, 0);
+  lcd.print("H");
+  delay(animDelay);
+  lcd.print("Y");
+  delay(animDelay);
+  lcd.print("D");
+  delay(animDelay);
+  lcd.print("R");
+  delay(animDelay);
+  lcd.print("O");
+  delay(animDelay);
+  lcd.print("P");
+  delay(animDelay);
+  lcd.print("O");
+  delay(animDelay);
+  lcd.print("N");
+  delay(animDelay);
+  lcd.print("I");
+  delay(animDelay);
+  lcd.print("C");
+  delay(500);
+  lcd.setCursor(7, 1);
+  lcd.print("SOLUTIONS");
+  delay(2000);
+  lcd.clear();
+  lcd.setCursor(1, 1);
+  lcd.print("Version 0.1.1");
+  delay(2000);
 }
