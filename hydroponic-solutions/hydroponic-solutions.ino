@@ -22,17 +22,13 @@ enum class DisplayState {
   WATER_LEVEL,
   TARGET_EC,
   INIT,
-  SLEEP,
-  RUN_TsIME,
-  SET_RUN_TIME,
-  NUTRITION_TIME,
-  SET_NUTRITION_TIME
+  SLEEP
 };
 
 int state;
 DisplayState dispState;
 
-const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5;
+const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5, backlightPin = 12;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 Conductivity conductivity(A5, A1, A2, A0);
@@ -57,6 +53,8 @@ void setup() {
   Serial.begin(9600);
   buttonSetup();
   conductivity.setup();
+  pinMode(backlightPin, OUTPUT);
+  digitalWrite(backlightPin, HIGH);
   state = STATE_MAIN;
   dispState = DisplayState::INIT;
 }
@@ -151,7 +149,7 @@ void updateLCD() {
       break;
     case DisplayState::SLEEP:
       lcd.setCursor(0, 1);
-      lcd.noDisplay();
+      digitalWrite(backlightPin, LOW);
       break;
     default:
       break;
@@ -231,7 +229,7 @@ void goToNext(DisplayState& dispState) {
 
 void wakeUp() {
   Serial.println("turn on display");
-  lcd.display();
+  digitalWrite(backlightPin, HIGH);
 }
 
 void logoAnimation() {
