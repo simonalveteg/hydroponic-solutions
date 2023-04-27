@@ -1,6 +1,7 @@
 #include <LiquidCrystal.h>
 #include <Streaming.h>
 #include <OneButton.h>
+#include <EEPROM.h>
 #include "Sonar.h"
 #include "Conductivity.h"
 #include "Pump.h"
@@ -22,7 +23,6 @@ enum class DisplayState {
   TARGET_EC,
   INIT,
   SLEEP,
-  WAKE,
   RUN_TsIME,
   SET_RUN_TIME,
   NUTRITION_TIME,
@@ -68,9 +68,6 @@ void loop() {
   updateLCD();
   switch (state) {
     case STATE_MAIN:
-      lcd.setCursor(0, 0);
-      lcd.println("MAIN STATE       ");
-
       if (checkWaterLevel()) {
         waterPump.start();
         stirPump.start();
@@ -83,7 +80,7 @@ void loop() {
       break;
     case STATE_WAIT:
       lcd.setCursor(0, 0);
-      lcd.println("IDLE STATE       ");
+      lcd.println("IDLING...              ");
 
       if (millis() - waitTimer > RUN_INTERVAL) {
         state = STATE_MAIN;
@@ -91,7 +88,7 @@ void loop() {
       break;
     case STATE_STIR:
       lcd.setCursor(0, 0);
-      lcd.println("STIR STATE       ");
+      lcd.println("PUMP AND STIR...  ");
 
       if (millis() - pumpTimer > RUN_TIME) {
         waterPump.stop();
@@ -109,7 +106,7 @@ void loop() {
       break;
     case STATE_NUTRIENT:
       lcd.setCursor(0, 0);
-      lcd.println("NUTRIENT STATE       ");
+      lcd.println("PUMP NUTRIENTS...    ");
       if (millis() - pumpTimer > NUTRIENT_RUN_TIME) {
         nutrientPump.stop();
         stirPump.start();
@@ -135,32 +132,31 @@ void updateLCD() {
       break;
     case DisplayState::CURRENT_EC:
       lcd.setCursor(0, 1);
-      lcd << "Current EC: " << conductivity.EC25 << "     ";
+      lcd << "EC: " << conductivity.EC25 << "                  ";
       break;
     case DisplayState::TEMP:
       lcd.setCursor(0, 1);
-      lcd << "Temp: " << conductivity.Temperature << char(223) << "C     ";
+      lcd << "Temp: " << conductivity.Temperature << char(223) << "C              ";
       break;
     case DisplayState::WATER_LEVEL:
       lcd.setCursor(0, 1);
-      lcd << "Water Lvl: " << waterLevel << "%     ";
+      lcd << "Water Lvl: " << waterLevel << "%                ";
       break;
     case DisplayState::TARGET_EC:
       lcd.setCursor(0, 1);
       lcd << "Target EC: " << targetEC << "     ";
+      if (millis() - interactionTimer > 5000) {
+        dispState = DisplayState::CURRENT_EC;
+      }
       break;
     case DisplayState::SLEEP:
       lcd.setCursor(0, 1);
       lcd.noDisplay();
       break;
-    case DisplayState::WAKE:
-      lcd.display();
-      dispState = DisplayState::CURRENT_EC;
-      break;
     default:
       break;
   }
-  if (millis() - interactionTimer > 60000) {
+  if (millis() - interactionTimer > 6000) {
     dispState = DisplayState::SLEEP;
   }
 }
@@ -191,34 +187,51 @@ void buttonSetup() {
   btnScreen.attachClick([]() {
     Serial.println("PRESSED BUTTON");
     interactionTimer = millis();
+    wakeUp();
     goToNext(dispState);
   });
   btnUp.attachClick([]() {
     Serial.println("PRESSED BUTTON");
-    interactionTimer = millis();
-    dispState = DisplayState::TARGET_EC;
-    targetEC += 0.1;
+    changeProperty(true);
   });
   btnDown.attachClick([]() {
     Serial.println("PRESSED BUTTON");
-    interactionTimer = millis();
-    dispState = DisplayState::TARGET_EC;
-    targetEC -= 0.1;
+    changeProperty(false);
   });
 }
 
-void goToNext(DisplayState& dispState) {
-  if (dispState == DisplayState::SLEEP) {
-    Serial.println("turn on display");
-    dispState = DisplayState::WAKE;
-    return;
+void changeProperty(bool up) {
+  switch (dispState) {
+    case DisplayState::SLEEP:
+      wakeUp();
+      dispState = DisplayState::CURRENT_EC;
+      break;
+    case DisplayState::TARGET_EC:
+    case DisplayState::CURRENT_EC:
+      if (up) {
+        targetEC += 0.1;
+      } else {
+        targetEC -= 0.1;
+      }
+      dispState = DisplayState::TARGET_EC;
+    default:
+      break;
   }
+  interactionTimer = millis();
+}
+
+void goToNext(DisplayState& dispState) {
   int nextState = static_cast<int>(dispState) + 1;
   if (nextState > static_cast<int>(DisplayState::WATER_LEVEL)) {
     dispState = DisplayState::CURRENT_EC;
   } else {
     dispState = static_cast<DisplayState>(nextState);
   }
+}
+
+void wakeUp() {
+  Serial.println("turn on display");
+  lcd.display();
 }
 
 void logoAnimation() {
