@@ -41,7 +41,10 @@ Pump stirPump(11);
 
 int waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
 
-float targetEC = 1.6;  // Preferred value of EC is 1.6
+
+int targetECAdress = 0;
+float targetEC = 0;
+
 int screenState = 0;
 
 unsigned long waitTimer = 0, pumpTimer = 0, interactionTimer = 0;
@@ -53,10 +56,16 @@ OneButton btnDown = OneButton(ecDownPin, true, true);
 
 void setup() {
   Serial.begin(9600);
+  float value = EEPROM.read(targetECAdress);
+  Serial.println(value);
+  if (value <= 254) targetEC = value / 10 + 0.1;  // for some reason it is always 0.1 too little
+  else targetEC = 1.6;                            // Preferred value of EC is 1.6
   buttonSetup();
   conductivity.setup();
   pinMode(backlightPin, OUTPUT);
   digitalWrite(backlightPin, HIGH);
+  conductivity.read();
+  sonar.read();
   state = STATE_MAIN;
   dispState = DisplayState::INIT;
 }
@@ -152,6 +161,7 @@ void updateLCD() {
       lcd << "Target EC: " << targetEC << "     ";
       if (millis() - interactionTimer > 5000) {
         dispState = DisplayState::CURRENT_EC;
+        saveEEPROM();
       }
       break;
     case DisplayState::SLEEP:
@@ -161,7 +171,7 @@ void updateLCD() {
     default:
       break;
   }
-  if (millis() - interactionTimer > 6000 && dispState != DisplayState::SLEEP) {
+  if (millis() - interactionTimer > 60000 && dispState != DisplayState::SLEEP) {
     prevDispState = dispState;
     dispState = DisplayState::SLEEP;
   }
@@ -205,6 +215,10 @@ void buttonSetup() {
   });
 }
 
+void saveEEPROM() {
+  EEPROM.write(targetECAdress, targetEC * 10.0);
+}
+
 void changeProperty(bool up) {
   switch (dispState) {
     case DisplayState::SLEEP:
@@ -229,6 +243,9 @@ void goToNext() {
     wakeUp();
     return;
   }
+  if (dispState == DisplayState::TARGET_EC) {
+    saveEEPROM();
+  }
   int nextState = static_cast<int>(dispState) + 1;
   if (nextState > static_cast<int>(DisplayState::WATER_LEVEL)) {
     dispState = DisplayState::CURRENT_EC;
@@ -245,6 +262,7 @@ void wakeUp() {
 
 void logoAnimation() {
   int animDelay = 80;
+  int animDelay2 = 5;
   lcd.begin(16, 2);
   lcd.setCursor(0, 0);
   lcd.print("H");
@@ -267,9 +285,27 @@ void logoAnimation() {
   delay(animDelay);
   lcd.print("C");
   delay(500);
+
   lcd.setCursor(7, 1);
-  lcd.print("SOLUTIONS");
+  lcd.print("S");
+  delay(animDelay2);
+  lcd.print("O");
+  delay(animDelay2);
+  lcd.print("L");
+  delay(animDelay2);
+  lcd.print("U");
+  delay(animDelay2);
+  lcd.print("T");
+  delay(animDelay2);
+  lcd.print("I");
+  delay(animDelay2);
+  lcd.print("O");
+  delay(animDelay2);
+  lcd.print("N");
+  delay(animDelay2);
+  lcd.print("S");
   delay(2000);
+
   lcd.clear();
   lcd.setCursor(1, 1);
   lcd.print("Version 0.1.1");
