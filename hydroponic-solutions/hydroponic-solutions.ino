@@ -9,13 +9,14 @@
 
 #define RUN_INTERVAL 5000
 #define RUN_TIME 3000
-#define NUTRIENT_RUN_TIME 2000
+int NUTRIENT_RUN_TIME = 2000;
 
 #define STATE_MAIN 0
 #define STATE_PUMP 1
 #define STATE_NUTRIENT 2
 #define STATE_WAIT 3
 #define STATE_STIR 4
+#define STATE_EMPTY 5
 
 enum class DisplayState {
   CURRENT_EC,
@@ -23,20 +24,18 @@ enum class DisplayState {
   WATER_LEVEL,
   TARGET_EC,
   INIT,
-  SLEEP
 };
 
 int state;
 DisplayState dispState;
 DisplayState prevDispState;
 
-const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5, backlightPin = 12;
+const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 Conductivity conductivity(A5, A1, A2, A0);
 Sonar sonar(A3, A4, 200);
 Pump waterPump(9);
-Pump nutrientPump(10);
 Pump stirPump(11);
 
 int waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
@@ -62,8 +61,6 @@ void setup() {
   else targetEC = 1.6;                            // Preferred value of EC is 1.6
   buttonSetup();
   conductivity.setup();
-  pinMode(backlightPin, OUTPUT);
-  digitalWrite(backlightPin, HIGH);
   conductivity.read();
   sonar.read();
   state = STATE_MAIN;
@@ -84,7 +81,15 @@ void loop() {
         state = STATE_PUMP;
       } else {
         waitTimer = millis();
-        state = STATE_WAIT;
+        state = STATE_EMPTY;
+      }
+      break;
+    case STATE_EMPTY:
+      lcd.setCursor(0, 0);
+      lcd.println("!! I AM EMPTY !!      ");
+      
+      if (millis() - waitTimer > RUN_INTERVAL) {
+        state = STATE_MAIN;
       }
       break;
     case STATE_WAIT:
@@ -107,8 +112,6 @@ void loop() {
           waitTimer = millis();
           state = STATE_WAIT;
         } else {
-          nutrientPump.start();
-          pumpTimer = millis();
           state = STATE_NUTRIENT;
         }
       }
@@ -116,12 +119,10 @@ void loop() {
     case STATE_NUTRIENT:
       lcd.setCursor(0, 0);
       lcd.print("PUMP NUTRIENTS...    ");
-      if (millis() - pumpTimer > NUTRIENT_RUN_TIME) {
-        nutrientPump.stop();
-        stirPump.start();
-        pumpTimer = millis();
-        state = STATE_STIR;
-      }
+      // RUN NUTRIENTS FOR X AMOUNT OF TIME!!
+      stirPump.start();
+      pumpTimer = millis();
+      state = STATE_STIR;
       break;
     case STATE_STIR:
       lcd.setCursor(0, 0);
@@ -134,6 +135,12 @@ void loop() {
     default:
       Serial << "Uh oh.." << endl;
   }
+}
+
+long calculateRunTime() {
+  int unitHeight = 15;
+  int unitTime = 2000;
+  return waterLevel * unitTime / unitHeight;
 }
 
 void updateLCD() {
@@ -164,16 +171,8 @@ void updateLCD() {
         saveEEPROM();
       }
       break;
-    case DisplayState::SLEEP:
-      lcd.setCursor(0, 1);
-      digitalWrite(backlightPin, LOW);
-      break;
     default:
       break;
-  }
-  if (millis() - interactionTimer > 60000 && dispState != DisplayState::SLEEP) {
-    prevDispState = dispState;
-    dispState = DisplayState::SLEEP;
   }
 }
 
@@ -182,7 +181,7 @@ void updateLCD() {
 */
 bool checkWaterLevel() {
   unsigned int sonarDistance = sonar.read();
-  float maxDistance = 8;
+  float maxDistance = 10;  // distance to bottom TEMPORARY
   float minDistance = 1;
   waterLevel = 100 - 100 * (sonarDistance - minDistance) / (maxDistance - minDistance);
   waterLevel = (waterLevel < 0) ? 0 : waterLevel;
@@ -221,9 +220,6 @@ void saveEEPROM() {
 
 void changeProperty(bool up) {
   switch (dispState) {
-    case DisplayState::SLEEP:
-      wakeUp();
-      break;
     case DisplayState::TARGET_EC:
     case DisplayState::CURRENT_EC:
       if (up) {
@@ -239,10 +235,6 @@ void changeProperty(bool up) {
 }
 
 void goToNext() {
-  if (dispState == DisplayState::SLEEP) {
-    wakeUp();
-    return;
-  }
   if (dispState == DisplayState::TARGET_EC) {
     saveEEPROM();
   }
@@ -252,12 +244,6 @@ void goToNext() {
   } else {
     dispState = static_cast<DisplayState>(nextState);
   }
-}
-
-void wakeUp() {
-  dispState = prevDispState;
-  Serial.println("turn on display");
-  digitalWrite(backlightPin, HIGH);
 }
 
 void logoAnimation() {
