@@ -13,34 +13,31 @@ void setup() {
   pinMode(STEP_PIN, OUTPUT);
   nutrient.setup();
   delay(10000);
+  //pump(1.0);
 }
 
 void loop() {
-  // measureLoop();
+  measureLoop();
   nutrient.read();
-  Serial << nutrient.ec25 << ", " << nutrient.concentration << ", " << nutrient.temperature << endl;
+  //Serial << nutrient.ec25 << ", " << nutrient.concentration << ", " << nutrient.temperature << endl;
+  nutrient.refill(1, 2.0);
+  delay(10000);
 }
 
 void measureLoop() {
-  float totalEC = 0;
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 100; i++) {
     nutrient.read();
-    totalEC += nutrient.ec25;
+    Serial << nutrient.ec25 << "mS/cm, " << nutrient.concentration << "ml/l, " << nutrient.temperature <<"deg C" << endl;
   }
-  ec = totalEC / 50;
-
-  Serial << volume << "," << ec << endl;
-
-  pump(1);
-  volume += 0.10857;
-  delay(60000);
 }
 
-void pump(float varv) {
-  for (int i = 0; i < 200 * varv; i++) {  // gjorde en loop av nån anledning
+void pump(float ml) {
+  int steps = ml / (0.10857 / 200);
+  Serial << "STEPS TO TAKE: " << steps << endl;
+  for (int i = 0; i < steps; i++) {  
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(TIME);
+    delayMicroseconds(500);
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(TIME);
+    delayMicroseconds(500);
   }
 }

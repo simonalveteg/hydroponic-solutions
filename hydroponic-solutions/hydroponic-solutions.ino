@@ -19,10 +19,10 @@ int NUTRIENT_RUN_TIME = 2000;
 #define STATE_EMPTY 5
 
 enum class DisplayState {
-  CURRENT_EC,
+  CURRENT_CONC,
   TEMP,
   WATER_LEVEL,
-  TARGET_EC ,
+  TARGET_CONC ,
   INIT,
 };
 
@@ -41,8 +41,8 @@ Pump stirPump(11);
 float waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
 float cmWaterheight = 0; // keep track of water height in cm
 
-int targetECAdress = 0;
-float targetEC = 0;
+int targetConcAdress = 0;
+float targetConc = 0;
 
 int screenState = 0;
 
@@ -55,10 +55,10 @@ OneButton btnDown = OneButton(ecDownPin, true, true);
 
 void setup() {
   Serial.begin(9600);
-  float value = EEPROM.read(targetECAdress);
+  float value = EEPROM.read(targetConcAdress);
   Serial.println(value);
-  if (value <= 254) targetEC = value / 10 + 0.1;  // for some reason it is always 0.1 too little
-  else targetEC = 1.6;                            // Preferred value of EC is 1.6
+  if (value <= 254) targetConc = value / 10 + 0.1;  // for some reason it is always 0.1 too little
+  else targetConc = 2.0;                            // Preferred concentration is 2.0 ml/l
   buttonSetup();
   nutrient.setup();
   nutrient.read();
@@ -108,7 +108,7 @@ void loop() {
         waterPump.stop();
         stirPump.stop();
 
-        if (checkEC()) {
+        if (checkConcentration()) {
           waitTimer = millis();
           state = STATE_WAIT;
         } else {
@@ -119,7 +119,7 @@ void loop() {
     case STATE_NUTRIENT:
       lcd.setCursor(0, 0);
       lcd.print("PUMP NUTRIENTS...    ");
-      nutrient.refill(getWaterVolume());
+      nutrient.refill(getWaterVolume(), targetConc);
       stirPump.start();
       pumpTimer = millis();
       state = STATE_STIR;
@@ -143,11 +143,11 @@ void updateLCD() {
     case DisplayState::INIT:
       logoAnimation();
       interactionTimer = millis();
-      dispState = DisplayState::CURRENT_EC;
+      dispState = DisplayState::CURRENT_CONC;
       break;
-    case DisplayState::CURRENT_EC:
+    case DisplayState::CURRENT_CONC:
       lcd.setCursor(0, 1);
-      lcd << "EC: " << nutrient.ec25 << "                  ";
+      lcd << nutrient.concentration << "ml/l                  ";
       break;
     case DisplayState::TEMP:
       lcd.setCursor(0, 1);
@@ -155,13 +155,13 @@ void updateLCD() {
       break;
     case DisplayState::WATER_LEVEL:
       lcd.setCursor(0, 1);
-      lcd << "Water Lvl: " << waterLevel << "%                ";
+      lcd << "Water Lvl: " << waterLevel << "%, " << getWaterVolume() << "l                ";
       break;
-    case DisplayState::TARGET_EC:
+    case DisplayState::TARGET_CONC:
       lcd.setCursor(0, 1);
-      lcd << "Target EC: " << targetEC << "     ";
+      lcd << "Target conc: " << targetConc << "     ";
       if (millis() - interactionTimer > 5000) {
-        dispState = DisplayState::CURRENT_EC;
+        dispState = DisplayState::CURRENT_CONC;
         saveEEPROM();
       }
       break;
@@ -190,12 +190,12 @@ float getWaterVolume() {
 }
 
 /**
-* Check EC level. Return true if value is above setpoint.
+* Check concentration. Return true if value is above setpoint.
 */
-bool checkEC() {
+bool checkConcentration() {
   nutrient.read();
   nutrient.print();
-  return nutrient.ec25 > targetEC;
+  return nutrient.concentration > targetConc;
 }
 
 void buttonSetup() {
@@ -215,19 +215,19 @@ void buttonSetup() {
 }
 
 void saveEEPROM() {
-  EEPROM.write(targetECAdress, targetEC * 10.0);
+  EEPROM.write(targetConcAdress, targetConc * 10.0);
 }
 
 void changeProperty(bool up) {
   switch (dispState) {
-    case DisplayState::TARGET_EC:
-    case DisplayState::CURRENT_EC:
+    case DisplayState::TARGET_CONC:
+    case DisplayState::CURRENT_CONC:
       if (up) {
-        targetEC += 0.1;
+        targetConc += 0.1;
       } else {
-        targetEC -= 0.1;
+        targetConc -= 0.1;
       }
-      dispState = DisplayState::TARGET_EC;
+      dispState = DisplayState::TARGET_CONC;
     default:
       break;
   }
@@ -235,12 +235,12 @@ void changeProperty(bool up) {
 }
 
 void goToNext() {
-  if (dispState == DisplayState::TARGET_EC) {
+  if (dispState == DisplayState::TARGET_CONC) {
     saveEEPROM();
   }
   int nextState = static_cast<int>(dispState) + 1;
   if (nextState > static_cast<int>(DisplayState::WATER_LEVEL)) {
-    dispState = DisplayState::CURRENT_EC;
+    dispState = DisplayState::CURRENT_CONC;
   } else {
     dispState = static_cast<DisplayState>(nextState);
   }
