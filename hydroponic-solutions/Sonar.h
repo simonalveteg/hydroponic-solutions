@@ -9,6 +9,7 @@ private:
 public:
   Sonar(int triggerPin, int echoPin, int maxDistance);
   unsigned int read();
+  unsigned int ping_median(int interations);
 };
 
 #endif

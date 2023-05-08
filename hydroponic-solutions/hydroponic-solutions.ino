@@ -38,7 +38,8 @@ Sonar sonar(A3, A4, 200);
 Pump waterPump(9);
 Pump stirPump(11);
 
-int waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
+float waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
+float cmWaterheight = 0; // keep track of water height in cm
 
 
 int targetECAdress = 0;
@@ -180,13 +181,19 @@ void updateLCD() {
 * Check the water level. Return true if it's above the minimum height and false otherwise.
 */
 bool checkWaterLevel() {
-  unsigned int sonarDistance = sonar.read();
-  float maxDistance = 10;  // distance to bottom TEMPORARY
-  float minDistance = 1;
-  waterLevel = 100 - 100 * (sonarDistance - minDistance) / (maxDistance - minDistance);
+  int maxDistance = 12;
+  int minDistance = 4;
+  float cmSensor = sonar.ping_median(20)/58.2;
+  cmWaterheight = maxDistance-cmSensor;
+  waterLevel = 100 - 100 * (cmSensor - minDistance) / (maxDistance - minDistance);
   waterLevel = (waterLevel < 0) ? 0 : waterLevel;
-  Serial << "Distance to water: " << sonarDistance << "cm. Water level: " << waterLevel << "%" << endl;
-  return sonarDistance >= minDistance && sonarDistance <= maxDistance;
+  waterLevel = ((waterLevel > 100) ? 100 : waterLevel);
+  Serial << "Water height: " << cmWaterheight << "cm, Water level: " << waterLevel << "%, " << "Water volume: " << getWaterVolume() << " litres" << endl;
+  return cmSensor >= minDistance && cmSensor <= maxDistance;
+}
+
+float getWaterVolume() {
+  return 0.385*cmWaterheight;
 }
 
 /**
