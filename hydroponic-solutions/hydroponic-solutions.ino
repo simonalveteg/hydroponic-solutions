@@ -7,9 +7,9 @@
 #include "Pump.h"
 
 
-#define RUN_INTERVAL 5000
-#define RUN_TIME 3000
-int NUTRIENT_RUN_TIME = 2000;
+#define WAIT_TIME 600000
+#define RUN_TIME 600000
+#define STIR_TIME 30000
 
 #define STATE_MAIN 0
 #define STATE_PUMP 1
@@ -22,7 +22,8 @@ enum class DisplayState {
   CURRENT_CONC,
   TEMP,
   WATER_LEVEL,
-  TARGET_CONC ,
+  PUMPED,
+  TARGET_CONC,
   INIT,
 };
 
@@ -38,11 +39,14 @@ Sonar sonar(A3, A4, 200);
 Pump waterPump(9);
 Pump stirPump(11);
 
-float waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
-float cmWaterheight = 0; // keep track of water height in cm
+float waterLevel = 0;     // keep track of water level (in terms of percentage filled?)
+float cmWaterheight = 0;  // keep track of water height in cm
 
 int targetConcAdress = 0;
 float targetConc = 0;
+
+int nutrientAddedAdress = 8;
+float nutrientAdded = 0;
 
 int screenState = 0;
 
@@ -53,12 +57,20 @@ OneButton btnScreen = OneButton(screenPin, true, true);
 OneButton btnUp = OneButton(ecUpPin, true, true);
 OneButton btnDown = OneButton(ecDownPin, true, true);
 
+
 void setup() {
   Serial.begin(9600);
   float value = EEPROM.read(targetConcAdress);
   Serial.println(value);
   if (value <= 254) targetConc = value / 10 + 0.1;  // for some reason it is always 0.1 too little
   else targetConc = 2.0;                            // Preferred concentration is 2.0 ml/l
+
+  float val = EEPROM.read(nutrientAddedAdress);
+  Serial.println(val);
+  if (val <= 254) nutrientAdded = val / 10 + 0.1;  // for some reason it is always 0.1 too little
+  else nutrientAdded = 0.0;                        // Preferred concentration is 2.0 ml/l
+
+
   buttonSetup();
   nutrient.setup();
   nutrient.read();
@@ -68,12 +80,14 @@ void setup() {
 }
 
 void loop() {
+  Serial.println(state);
   btnScreen.tick();
   btnUp.tick();
   btnDown.tick();
   updateLCD();
   switch (state) {
     case STATE_MAIN:
+      Serial.println("MAIN??");
       if (checkWaterLevel()) {
         waterPump.start();
         stirPump.start();
@@ -85,22 +99,25 @@ void loop() {
       }
       break;
     case STATE_EMPTY:
+      Serial.println("EMPTY??");
       lcd.setCursor(0, 0);
       lcd.println("!! I AM EMPTY !!      ");
-      
-      if (millis() - waitTimer > RUN_INTERVAL) {
+
+      if (millis() - waitTimer > WAIT_TIME) {
         state = STATE_MAIN;
       }
       break;
     case STATE_WAIT:
+      Serial.println("WAIT??");
       lcd.setCursor(0, 0);
       lcd.println("IDLING...              ");
 
-      if (millis() - waitTimer > RUN_INTERVAL) {
+      if (millis() - waitTimer > WAIT_TIME) {
         state = STATE_MAIN;
       }
       break;
     case STATE_PUMP:
+      Serial.println("PUMP??");
       lcd.setCursor(0, 0);
       lcd.println("PUMP AND STIR...  ");
 
@@ -117,18 +134,28 @@ void loop() {
       }
       break;
     case STATE_NUTRIENT:
+      Serial.println("NUTRIENT??");
       lcd.setCursor(0, 0);
       lcd.print("PUMP NUTRIENTS...    ");
-      nutrient.refill(getWaterVolume(), targetConc);
+      nutrientAdded += nutrient.refill(getWaterVolume(), targetConc);
+      EEPROM.write(nutrientAddedAdress, nutrientAdded * 10.0);
+      Serial.println("h");
       stirPump.start();
+      Serial.println("he");
       pumpTimer = millis();
+      Serial.println("hej");
       state = STATE_STIR;
+      Serial.println("hejs");
       break;
     case STATE_STIR:
+      Serial.println("STIR??");
+      Serial.println("g");
       lcd.setCursor(0, 0);
+      Serial.println("ge");
       lcd.print("STIRRING...      ");
       if (millis() - pumpTimer > RUN_TIME) {
         stirPump.stop();
+        Serial.println("gej");
         state = STATE_MAIN;
       }
       break;
@@ -138,7 +165,7 @@ void loop() {
 }
 
 void updateLCD() {
-  Serial << "DisplayState: " << static_cast<int>(dispState) << "Prev: " << static_cast<int>(prevDispState) << " time: " << millis() - interactionTimer << endl;
+  // Serial << "DisplayState: " << static_cast<int>(dispState) << "Prev: " << static_cast<int>(prevDispState) << " time: " << millis() - interactionTimer << endl;
   switch (dispState) {
     case DisplayState::INIT:
       logoAnimation();
@@ -147,7 +174,7 @@ void updateLCD() {
       break;
     case DisplayState::CURRENT_CONC:
       lcd.setCursor(0, 1);
-      lcd << nutrient.concentration << "ml/l                  ";
+      lcd << "Conc: " << nutrient.concentration << "ml/l                  ";
       break;
     case DisplayState::TEMP:
       lcd.setCursor(0, 1);
@@ -155,7 +182,7 @@ void updateLCD() {
       break;
     case DisplayState::WATER_LEVEL:
       lcd.setCursor(0, 1);
-      lcd << "Water Lvl: " << waterLevel << "%, " << getWaterVolume() << "l                ";
+      lcd << "W: " << waterLevel << "%, " << getWaterVolume() << "l                ";
       break;
     case DisplayState::TARGET_CONC:
       lcd.setCursor(0, 1);
@@ -164,6 +191,10 @@ void updateLCD() {
         dispState = DisplayState::CURRENT_CONC;
         saveEEPROM();
       }
+      break;
+    case DisplayState::PUMPED:
+      lcd.setCursor(0, 1);
+      lcd << "Pumped: " << nutrientAdded << " ml    ";
       break;
     default:
       break;
@@ -176,17 +207,18 @@ void updateLCD() {
 bool checkWaterLevel() {
   int maxDistance = 12;
   int minDistance = 4;
-  float cmSensor = sonar.ping_median(20)/58.2;
-  cmWaterheight = maxDistance-cmSensor;
+  float cmSensor = sonar.ping_median(20) / 58.2;
+  cmWaterheight = maxDistance - cmSensor;
   waterLevel = 100 - 100 * (cmSensor - minDistance) / (maxDistance - minDistance);
   waterLevel = (waterLevel < 0) ? 0 : waterLevel;
   waterLevel = ((waterLevel > 100) ? 100 : waterLevel);
-  Serial << "Water height: " << cmWaterheight << "cm, Water level: " << waterLevel << "%, " << "Water volume: " << getWaterVolume() << " litres" << endl;
+  Serial << "Water height: " << cmWaterheight << "cm, Water level: " << waterLevel << "%, "
+         << "Water volume: " << getWaterVolume() << " litres" << endl;
   return cmSensor >= minDistance && cmSensor <= maxDistance;
 }
 
 float getWaterVolume() {
-  return 0.385*cmWaterheight;
+  return 0.385 * cmWaterheight;
 }
 
 /**
@@ -195,7 +227,7 @@ float getWaterVolume() {
 bool checkConcentration() {
   nutrient.read();
   nutrient.print();
-  return nutrient.concentration > targetConc;
+  return nutrient.concentration > targetConc * 0.9;
 }
 
 void buttonSetup() {
@@ -239,7 +271,7 @@ void goToNext() {
     saveEEPROM();
   }
   int nextState = static_cast<int>(dispState) + 1;
-  if (nextState > static_cast<int>(DisplayState::WATER_LEVEL)) {
+  if (nextState > static_cast<int>(DisplayState::PUMPED)) {
     dispState = DisplayState::CURRENT_CONC;
   } else {
     dispState = static_cast<DisplayState>(nextState);
