@@ -1,21 +1,43 @@
-#define STEP_PIN 12
-#define DIR_PIN 13
-#define ENABLE_PIN 11
-#define TIME 750
+#include <Streaming.h>
+#include "Conductivity.h"
+#include "Nutrient.h"
+
+#define STEP_PIN 13
+#define TIME 500
+
+Nutrient nutrient(A5, A1, A2, A0, STEP_PIN);
+float volume = 0, ec = 0;
 
 void setup() {
   // put your setup code here, to run once:
   pinMode(STEP_PIN, OUTPUT);
-  pinMode(DIR_PIN, OUTPUT);
-  pinMode(ENABLE_PIN, OUTPUT);
-  digitalWrite(ENABLE_PIN, LOW);
-  digitalWrite(DIR_PIN, HIGH);
+  nutrient.setup();
+  delay(10000);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  Serial.println("hakfsjdh");
-  for (int i = 0; i < 360; i++) { // gjorde en loop av nån anledning
+  // measureLoop();
+  nutrient.read();
+  Serial << nutrient.ec25 << ", " << nutrient.concentration << ", " << nutrient.temperature << endl;
+}
+
+void measureLoop() {
+  float totalEC = 0;
+  for (int i = 0; i < 50; i++) {
+    nutrient.read();
+    totalEC += nutrient.ec25;
+  }
+  ec = totalEC / 50;
+
+  Serial << volume << "," << ec << endl;
+
+  pump(1);
+  volume += 0.10857;
+  delay(60000);
+}
+
+void pump(float varv) {
+  for (int i = 0; i < 200 * varv; i++) {  // gjorde en loop av nån anledning
     digitalWrite(STEP_PIN, HIGH);
     delayMicroseconds(TIME);
     digitalWrite(STEP_PIN, LOW);

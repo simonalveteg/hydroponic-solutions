@@ -3,7 +3,7 @@
 #include <OneButton.h>
 #include <EEPROM.h>
 #include "Sonar.h"
-#include "Conductivity.h"
+#include "Nutrient.h"
 #include "Pump.h"
 
 
@@ -22,7 +22,7 @@ enum class DisplayState {
   CURRENT_EC,
   TEMP,
   WATER_LEVEL,
-  TARGET_EC,
+  TARGET_EC ,
   INIT,
 };
 
@@ -33,14 +33,13 @@ DisplayState prevDispState;
 const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-Conductivity conductivity(A5, A1, A2, A0);
+Nutrient nutrient(A5, A1, A2, A0, 13);
 Sonar sonar(A3, A4, 200);
 Pump waterPump(9);
 Pump stirPump(11);
 
 float waterLevel = 0;  // keep track of water level (in terms of percentage filled?)
 float cmWaterheight = 0; // keep track of water height in cm
-
 
 int targetECAdress = 0;
 float targetEC = 0;
@@ -61,8 +60,8 @@ void setup() {
   if (value <= 254) targetEC = value / 10 + 0.1;  // for some reason it is always 0.1 too little
   else targetEC = 1.6;                            // Preferred value of EC is 1.6
   buttonSetup();
-  conductivity.setup();
-  conductivity.read();
+  nutrient.setup();
+  nutrient.read();
   sonar.read();
   state = STATE_MAIN;
   dispState = DisplayState::INIT;
@@ -120,7 +119,7 @@ void loop() {
     case STATE_NUTRIENT:
       lcd.setCursor(0, 0);
       lcd.print("PUMP NUTRIENTS...    ");
-      // RUN NUTRIENTS FOR X AMOUNT OF TIME!!
+      nutrient.refill(getWaterVolume());
       stirPump.start();
       pumpTimer = millis();
       state = STATE_STIR;
@@ -138,12 +137,6 @@ void loop() {
   }
 }
 
-long calculateRunTime() {
-  int unitHeight = 15;
-  int unitTime = 2000;
-  return waterLevel * unitTime / unitHeight;
-}
-
 void updateLCD() {
   Serial << "DisplayState: " << static_cast<int>(dispState) << "Prev: " << static_cast<int>(prevDispState) << " time: " << millis() - interactionTimer << endl;
   switch (dispState) {
@@ -154,11 +147,11 @@ void updateLCD() {
       break;
     case DisplayState::CURRENT_EC:
       lcd.setCursor(0, 1);
-      lcd << "EC: " << conductivity.EC25 << "                  ";
+      lcd << "EC: " << nutrient.ec25 << "                  ";
       break;
     case DisplayState::TEMP:
       lcd.setCursor(0, 1);
-      lcd << "Temp: " << conductivity.Temperature << char(223) << "C              ";
+      lcd << "Temp: " << nutrient.temperature << char(223) << "C              ";
       break;
     case DisplayState::WATER_LEVEL:
       lcd.setCursor(0, 1);
@@ -200,9 +193,9 @@ float getWaterVolume() {
 * Check EC level. Return true if value is above setpoint.
 */
 bool checkEC() {
-  conductivity.read();
-  conductivity.print();
-  return conductivity.EC25 > targetEC;
+  nutrient.read();
+  nutrient.print();
+  return nutrient.ec25 > targetEC;
 }
 
 void buttonSetup() {
