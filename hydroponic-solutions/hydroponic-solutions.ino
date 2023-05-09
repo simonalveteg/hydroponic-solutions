@@ -31,7 +31,7 @@ int state;
 DisplayState dispState;
 DisplayState prevDispState;
 
-const int rs = 0, en = 1, d4 = 2, d5 = 3, d6 = 4, d7 = 5;
+const int rs = 7, en = 8, d4 = 2, d5 = 3, d6 = 4, d7 = 5;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 Nutrient nutrient(A5, A1, A2, A0, 13);
@@ -52,7 +52,7 @@ int screenState = 0;
 
 unsigned long waitTimer = 0, pumpTimer = 0, interactionTimer = 0;
 
-const int screenPin = 6, ecUpPin = 7, ecDownPin = 8;
+const int screenPin = 6, ecUpPin = 0, ecDownPin = 1;
 OneButton btnScreen = OneButton(screenPin, true, true);
 OneButton btnUp = OneButton(ecUpPin, true, true);
 OneButton btnDown = OneButton(ecDownPin, true, true);
